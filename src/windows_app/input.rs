@@ -1886,16 +1886,13 @@ impl App {
             const CMD_CLOSE_WORKSPACE: usize = 8;
 
             AppendMenuW(menu, MF_STRING, CMD_NEW_FILE, wide("New File...").as_ptr());
-
             AppendMenuW(
                 menu,
                 MF_STRING,
                 CMD_NEW_FOLDER,
                 wide("New Folder...").as_ptr(),
             );
-            AppendMenuW(menu, MF_STRING, CMD_NEW_FOLDER, wide("New Folder...").as_ptr());
             AppendMenuW(menu, MF_STRING, CMD_ADD_FILE, wide("Add File...").as_ptr());
-
             AppendMenuW(menu, MF_SEPARATOR, 0, null());
             AppendMenuW(
                 menu,

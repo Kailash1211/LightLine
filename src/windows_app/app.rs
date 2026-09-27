@@ -54,6 +54,8 @@ pub(super) enum WorkerMessage {
     // A live gutter recompute: (request generation, file, marks).
     GutterComputed(u64, PathBuf, GutterDiff),
     GitWrite(GitAction, Result<(), String>),
+    // Explorer "Add File...": the folder, the new file and the copy's outcome.
+    FileAdded(PathBuf, PathBuf, Result<(), String>),
     ExtensionInstalled(String, bool),
     // The full Zed registry id/version list, for the Extensions panel search.
     ZedRegistryList(Result<Vec<(String, String)>, String>),
@@ -2364,6 +2366,16 @@ impl App {
     }
 
     pub(super) fn dialog(&self, hwnd: HWND, save: bool) -> Option<PathBuf> {
+        self.file_dialog(hwnd, save, false)
+    }
+
+    /// The Open dialog with "All files" selected, for picking a file of any
+    /// kind rather than one to edit (Explorer: Add File...).
+    pub(super) fn pick_any_file(&self, hwnd: HWND) -> Option<PathBuf> {
+        self.file_dialog(hwnd, false, true)
+    }
+
+    fn file_dialog(&self, hwnd: HWND, save: bool, all_files: bool) -> Option<PathBuf> {
         let mut buffer = [0u16; 32768];
         if save && let Some(path) = &self.doc().path {
             let name: Vec<u16> = path.file_name()?.to_string_lossy().encode_utf16().collect();
@@ -2374,6 +2386,8 @@ impl App {
         dialog.lStructSize = size_of::<OPENFILENAMEW>() as u32;
         dialog.hwndOwner = hwnd;
         dialog.lpstrFilter = filter.as_ptr();
+        // 1-based index into `filter`: text files, or all files.
+        dialog.nFilterIndex = if all_files { 2 } else { 1 };
         dialog.lpstrFile = buffer.as_mut_ptr();
         dialog.nMaxFile = buffer.len() as u32;
         dialog.Flags = OFN_EXPLORER

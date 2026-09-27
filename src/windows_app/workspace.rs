@@ -276,26 +276,42 @@ impl App {
         target: PathBuf,
         result: Result<(), String>,
     ) {
-        // The workspace was switched, reopened or closed during the copy:
-        // the result belongs to a session that's gone, so it mustn't touch
-        // the status or the Explorer of the current one.
-        if generation != self.workspace_generation {
-            return;
-        }
+        // If the workspace was switched, reopened or closed during the copy,
+        // the user has moved on: the result mustn't change the status or the
+        // Explorer selection.
+        let same_session = generation == self.workspace_generation;
         if let Err(error) = result {
-            self.status = error;
+            if same_session {
+                self.status = error;
+            }
             return;
         }
-        let name = target
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        self.status = format!("Added {}", name);
-        self.directory_cache.remove(&parent);
-        self.load_directory(&parent);
-        self.expanded_dirs.insert(parent);
-        self.selected_explorer_path = Some(target);
-        self.refresh_git(hwnd);
+        // The new file is on disk either way. While its folder is in the open
+        // workspace (e.g. the same folder was reopened), the folder's
+        // listing and Git status still need refreshing so the file shows up.
+        if self
+            .workspace_root
+            .as_ref()
+            .is_some_and(|root| parent.starts_with(root))
+        {
+            self.directory_cache.remove(&parent);
+            if same_session {
+                self.expanded_dirs.insert(parent.clone());
+            }
+            if self.workspace_root.as_ref() == Some(&parent) || self.expanded_dirs.contains(&parent)
+            {
+                self.load_directory(&parent);
+            }
+            self.refresh_git(hwnd);
+        }
+        if same_session {
+            let name = target
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            self.status = format!("Added {}", name);
+            self.selected_explorer_path = Some(target);
+        }
         self.refresh(hwnd);
     }
 

@@ -56,6 +56,7 @@ impl App {
                 .unwrap_or(&folder)
                 .to_path_buf();
             self.workspace_root = Some(root.clone());
+            self.workspace_generation += 1;
             self.workspace_branch = Self::head_branch(&root);
             self.expanded_dirs.insert(root.clone());
             self.load_directory(&root);
@@ -86,6 +87,7 @@ impl App {
             return;
         }
         self.workspace_root = Some(root.clone());
+        self.workspace_generation += 1;
         if let Some(watcher) = &self.watcher {
             watcher.watch_directory(root.clone());
         }
@@ -165,6 +167,7 @@ impl App {
             return;
         }
         self.workspace_root = None;
+        self.workspace_generation += 1;
         self.workspace_branch = None;
         self.directory_cache.clear();
         self.expanded_dirs.clear();
@@ -249,6 +252,7 @@ impl App {
         // freeze the window; add_file_finished picks up the result.
         self.status = format!("Adding {}...", file_name_str);
         let parent = parent.to_path_buf();
+        let generation = self.workspace_generation;
         let tx = self.worker_tx.clone();
         self.worker_started(hwnd);
         std::thread::spawn(move || {
@@ -259,7 +263,7 @@ impl App {
                     format!("Failed to add {}: {}", file_name_str, error)
                 }
             });
-            let _ = tx.send(WorkerMessage::FileAdded(parent, target, result));
+            let _ = tx.send(WorkerMessage::FileAdded(generation, parent, target, result));
         });
         unsafe { InvalidateRect(hwnd, null(), 0) };
     }
@@ -267,10 +271,17 @@ impl App {
     pub(super) fn add_file_finished(
         &mut self,
         hwnd: HWND,
+        generation: u64,
         parent: PathBuf,
         target: PathBuf,
         result: Result<(), String>,
     ) {
+        // The workspace was switched, reopened or closed during the copy:
+        // the result belongs to a session that's gone, so it mustn't touch
+        // the status or the Explorer of the current one.
+        if generation != self.workspace_generation {
+            return;
+        }
         if let Err(error) = result {
             self.status = error;
             return;
@@ -280,14 +291,6 @@ impl App {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         self.status = format!("Added {}", name);
-        // The workspace may have been closed or switched during the copy.
-        if !self
-            .workspace_root
-            .as_ref()
-            .is_some_and(|root| parent.starts_with(root))
-        {
-            return;
-        }
         self.directory_cache.remove(&parent);
         self.load_directory(&parent);
         self.expanded_dirs.insert(parent);

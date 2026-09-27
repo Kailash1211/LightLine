@@ -54,8 +54,9 @@ pub(super) enum WorkerMessage {
     // A live gutter recompute: (request generation, file, marks).
     GutterComputed(u64, PathBuf, GutterDiff),
     GitWrite(GitAction, Result<(), String>),
-    // Explorer "Add File...": the folder, the new file and the copy's outcome.
-    FileAdded(PathBuf, PathBuf, Result<(), String>),
+    // Explorer "Add File...": the workspace generation at request time, the
+    // folder, the new file and the copy's outcome.
+    FileAdded(u64, PathBuf, PathBuf, Result<(), String>),
     ExtensionInstalled(String, bool),
     // The full Zed registry id/version list, for the Extensions panel search.
     ZedRegistryList(Result<Vec<(String, String)>, String>),
@@ -486,6 +487,9 @@ pub(super) struct App {
     // Absolute path whose gutter diff is already cached.
     pub(super) gutter_done: Option<PathBuf>,
     pub(super) git_generation: u64,
+    // Bumped whenever the workspace is opened, switched or closed, so a
+    // background result from an earlier workspace (Add File...) is dropped.
+    pub(super) workspace_generation: u64,
     pub(super) git_ahead: usize,
     pub(super) git_behind: usize,
     pub(super) git_conflicted: bool,
@@ -937,6 +941,7 @@ impl App {
             gutter_request: None,
             gutter_done: None,
             git_generation: 0,
+            workspace_generation: 0,
             git_ahead: 0,
             git_behind: 0,
             git_conflicted: false,

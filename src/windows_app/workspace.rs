@@ -227,6 +227,47 @@ impl App {
         self.refresh(hwnd);
     }
 
+    pub(super) fn add_file_to_project(&mut self, hwnd: HWND, parent: &Path) {
+        let Some(source) = self.dialog(hwnd, false) else {
+            return;
+        };
+        let Some(file_name) = source.file_name() else {
+            self.status = "Invalid source file".into();
+            unsafe { InvalidateRect(hwnd, null(), 0) };
+            return;
+        };
+        let file_name_str = file_name.to_string_lossy();
+        let target = parent.join(file_name);
+
+        if Self::same_path(&source, &target) {
+            self.status = "Source and destination files are identical".into();
+            unsafe { InvalidateRect(hwnd, null(), 0) };
+            return;
+        }
+
+        if target.exists() {
+            self.status = format!("File '{}' already exists", file_name_str);
+            unsafe { InvalidateRect(hwnd, null(), 0) };
+            return;
+        }
+
+        match std::fs::copy(&source, &target) {
+            Ok(_) => {
+                self.directory_cache.remove(parent);
+                self.load_directory(parent);
+                self.expanded_dirs.insert(parent.to_path_buf());
+                self.selected_explorer_path = Some(target);
+                self.status = format!("Added {}", file_name_str);
+                self.refresh_git(hwnd);
+                self.refresh(hwnd);
+            }
+            Err(e) => {
+                self.status = format!("Failed to add {}: {}", file_name_str, e);
+                unsafe { InvalidateRect(hwnd, null(), 0) };
+            }
+        }
+    }
+
     pub(super) fn create_file_at(&mut self, hwnd: HWND, parent: &Path, name: &str) {
         let name = name.trim();
         if name.is_empty() || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
